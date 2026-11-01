@@ -10,6 +10,7 @@
 //  Sanjay Ghemawat, Jeff Dean, and others.
 #include "google/protobuf/compiler/csharp/csharp_doc_comment.h"
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/str_split.h"
 #include "google/protobuf/compiler/csharp/csharp_options.h"
@@ -22,10 +23,8 @@ namespace compiler {
 namespace csharp {
 
 // Functions to create C# XML documentation comments.
-// Currently this only includes documentation comments containing text specified
-// as comments in the .proto file; documentation comments generated just from
-// field/message/enum/proto names is inlined in the relevant code. If more
-// control is required, that code can be moved here.
+// Documentation generated from names rather than source comments is inlined in
+// the relevant generators.
 
 void WriteDocCommentBodyImpl(io::Printer* printer, SourceLocation location) {
   std::string comments = location.leading_comments.empty()
@@ -71,42 +70,89 @@ void WriteDocCommentBodyImpl(io::Printer* printer, SourceLocation location) {
   printer->Print("/// </summary>\n");
 }
 
+static std::string EncodeSourcePath(const std::string& path) {
+  constexpr char kHex[] = "0123456789ABCDEF";
+  std::string encoded;
+  for (unsigned char character : path) {
+    if ((character >= 'a' && character <= 'z') ||
+        (character >= 'A' && character <= 'Z') ||
+        (character >= '0' && character <= '9') || character == '-' ||
+        character == '_' || character == '.' || character == '~' ||
+        character == '/') {
+      encoded.push_back(character);
+      continue;
+    }
+    encoded.push_back('%');
+    encoded.push_back(kHex[character >> 4]);
+    encoded.push_back(kHex[character & 0x0f]);
+  }
+  return encoded;
+}
+
+static std::string EscapeSourceXml(const std::string& value) {
+  return absl::StrReplaceAll(value, {{"&", "&amp;"},
+                                     {"<", "&lt;"},
+                                     {">", "&gt;"},
+                                     {"\"", "&quot;"},
+                                     {"'", "&apos;"}});
+}
+
+static void WriteSourceLink(io::Printer* printer, const Options* options,
+                            const std::string& path, int start_line) {
+  if (!options->source_links && !options->source_links_text_prefix) return;
+  const std::string line = absl::StrCat(start_line + 1);
+  const std::string text = EscapeSourceXml(absl::StrCat(
+      options->source_links_text_prefix.value_or(""), path, ":", line));
+  if (!options->source_links) {
+    printer->Print("/// <remarks>Source: $text$</remarks>\n", "text", text);
+    return;
+  }
+  const std::string encoded_path = EncodeSourcePath(path);
+  const std::string href = absl::StrReplaceAll(
+      *options->source_links, {{"{path}", encoded_path}, {"{line}", line}});
+  printer->Print(
+      "/// <remarks>Source: <see href=\"$href$\">$text$</see></remarks>\n",
+      "href", EscapeSourceXml(href), "text", text);
+}
+
 template <typename DescriptorType>
-static void WriteDocCommentBody(io::Printer* printer,
+static void WriteDocCommentBody(io::Printer* printer, const Options* options,
                                 const DescriptorType* descriptor) {
   SourceLocation location;
   if (descriptor->GetSourceLocation(&location)) {
     WriteDocCommentBodyImpl(printer, location);
+    WriteSourceLink(printer, options, descriptor->file()->name(),
+                    location.start_line);
   }
 }
 
 void WriteMessageDocComment(io::Printer* printer, const Options* options,
                             const Descriptor* message) {
   if (options->strip_nonfunctional_codegen) return;
-  WriteDocCommentBody(printer, message);
+  WriteDocCommentBody(printer, options, message);
 }
 
 void WritePropertyDocComment(io::Printer* printer, const Options* options,
                              const FieldDescriptor* field) {
   if (options->strip_nonfunctional_codegen) return;
-  WriteDocCommentBody(printer, field);
+  WriteDocCommentBody(printer, options, field);
 }
 
 void WriteEnumDocComment(io::Printer* printer, const Options* options,
                          const EnumDescriptor* enumDescriptor) {
   if (options->strip_nonfunctional_codegen) return;
-  WriteDocCommentBody(printer, enumDescriptor);
+  WriteDocCommentBody(printer, options, enumDescriptor);
 }
 void WriteEnumValueDocComment(io::Printer* printer, const Options* options,
                               const EnumValueDescriptor* value) {
   if (options->strip_nonfunctional_codegen) return;
-  WriteDocCommentBody(printer, value);
+  WriteDocCommentBody(printer, options, value);
 }
 
 void WriteMethodDocComment(io::Printer* printer, const Options* options,
                            const MethodDescriptor* method) {
   if (options->strip_nonfunctional_codegen) return;
-  WriteDocCommentBody(printer, method);
+  WriteDocCommentBody(printer, options, method);
 }
 
 }  // namespace csharp

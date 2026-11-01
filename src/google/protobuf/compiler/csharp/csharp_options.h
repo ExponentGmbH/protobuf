@@ -10,6 +10,8 @@
 
 #include <string>
 
+#include "absl/types/optional.h"
+
 namespace google {
 namespace protobuf {
 namespace compiler {
@@ -48,6 +50,12 @@ struct Options {
   // Whether the generated classes should have a global::System.Serializable attribute added
   // Defaults to false
   bool serializable;
+  // Source URL template; must contain {path} (URL-encoded) and {line}
+  // (one-based). When absent, documentation is unchanged.
+  absl::optional<std::string> source_links;
+  // Prefix for the visible source path. Without a template, an empty prefix
+  // still enables plain source remarks.
+  absl::optional<std::string> source_links_text_prefix;
   // If true, strip out nonfunctional codegen.
   bool strip_nonfunctional_codegen;
 };
