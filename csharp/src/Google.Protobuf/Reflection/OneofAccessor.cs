@@ -31,11 +31,24 @@ namespace Google.Protobuf.Reflection
         internal static OneofAccessor ForRegularOneof(
             OneofDescriptor descriptor,
             PropertyInfo caseProperty,
-            MethodInfo clearMethod) =>
-            new OneofAccessor(
+            MethodInfo clearMethod)
+        {
+            MethodInfo caseGetter = caseProperty.GetGetMethod();
+            // ReflectionUtil's delegates cannot bind to a struct's instance methods, whose open form takes `ref T`, so
+            // creating them throws ArgumentException. Invoke runs on the box itself, so Clear reaches the caller's
+            // boxed message rather than a copy.
+            if (caseGetter.DeclaringType.IsValueType)
+            {
+                return new OneofAccessor(
+                    descriptor,
+                    message => (int) caseGetter.Invoke(obj: message, parameters: null),
+                    message => clearMethod.Invoke(obj: message, parameters: null));
+            }
+            return new OneofAccessor(
                 descriptor,
-                ReflectionUtil.CreateFuncIMessageInt32(caseProperty.GetGetMethod()),
+                ReflectionUtil.CreateFuncIMessageInt32(caseGetter),
                 ReflectionUtil.CreateActionIMessage(clearMethod));
+        }
 
         internal static OneofAccessor ForSyntheticOneof(OneofDescriptor descriptor)
         {

@@ -82,11 +82,8 @@ void EnumOneofFieldGenerator::GenerateMergingCode(io::Printer* printer) {
 }
 
 void EnumOneofFieldGenerator::GenerateParsingCode(io::Printer* printer) {
-  // TODO: What about if we read the default value?
-  printer->Print(
-    variables_,
-    "$oneof_name$_ = input.ReadEnum();\n"
-    "$oneof_name$Case_ = $oneof_property_name$OneofCase.$oneof_case_name$;\n");
+  printer->Print(variables_,
+    "$writing_member$ = ($type_name$) input.ReadEnum();\n");
 }
 
 void EnumOneofFieldGenerator::GenerateSerializationCode(io::Printer* printer) {

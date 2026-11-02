@@ -342,6 +342,10 @@ namespace Google.Protobuf.Collections
             return GetMapFieldHashCode(list);
         }
 
+        /// <summary>
+        /// Hash that ignores pair order, so maps holding the same pairs hash alike whatever order
+        /// <paramref name="list"/> yields them in.
+        /// </summary>
         public static int GetMapFieldHashCode(IEnumerable<System.Collections.Generic.KeyValuePair<TKey, TValue>> list) {
             var keyComparer = KeyEqualityComparer;
             var valueComparer = ValueEqualityComparer;
@@ -366,6 +370,10 @@ namespace Google.Protobuf.Collections
             return MapFieldEquals(this, other);
         }
 
+        /// <summary>
+        /// Compares two dictionaries as maps, ignoring pair order, for generated messages that hold
+        /// a map field as a read-only dictionary rather than a <see cref="MapField{TKey, TValue}"/>.
+        /// </summary>
         public static bool MapFieldEquals(IReadOnlyDictionary<TKey, TValue> This, IReadOnlyDictionary<TKey, TValue> other) {
             if (Object.ReferenceEquals(other, This))
             {
@@ -519,6 +527,9 @@ namespace Google.Protobuf.Collections
             return MapFieldCalculateSize(codec, list);
         }
 
+        /// <summary>
+        /// Wire size of <paramref name="list"/>, with each pair encoded as a tagged, length-prefixed entry.
+        /// </summary>
         public static int MapFieldCalculateSize(Codec codec, IEnumerable<System.Collections.Generic.KeyValuePair<TKey, TValue>> list) {
             int size = 0;
             foreach (var entry in list)

@@ -31,6 +31,8 @@ class RepeatedPrimitiveFieldGenerator : public FieldGeneratorBase {
   virtual void GenerateMergingCode(io::Printer* printer) override;
   virtual void GenerateParsingCode(io::Printer* printer) override;
   virtual void GenerateParsingCode(io::Printer* printer, bool use_parse_context) override;
+  virtual void GenerateParseLoopPrologue(io::Printer* printer) override;
+  virtual void GenerateParseLoopEpilogue(io::Printer* printer) override;
   virtual void GenerateSerializationCode(io::Printer* printer) override;
   virtual void GenerateSerializationCode(io::Printer* printer, bool use_write_context) override;
   virtual void GenerateSerializedSizeCode(io::Printer* printer) override;

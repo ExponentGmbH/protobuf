@@ -43,6 +43,9 @@ class FieldGeneratorBase : public SourceGeneratorBase {
   virtual void GenerateMergingCode(io::Printer* printer) = 0;
   virtual void GenerateParsingCode(io::Printer* printer) = 0;
   virtual void GenerateParsingCode(io::Printer* printer, bool use_parse_context);
+  // Emitted once before and once after a message's parse loop, for fields whose occurrences on the wire share state.
+  virtual void GenerateParseLoopPrologue(io::Printer* printer);
+  virtual void GenerateParseLoopEpilogue(io::Printer* printer);
   virtual void GenerateSerializationCode(io::Printer* printer) = 0;
   virtual void GenerateSerializationCode(io::Printer* printer, bool use_write_context);
   virtual void GenerateSerializedSizeCode(io::Printer* printer) = 0;
@@ -65,6 +68,8 @@ class FieldGeneratorBase : public SourceGeneratorBase {
   void AddPublicMemberAttributes(io::Printer* printer);
   void SetCommonOneofFieldVariables(
       absl::flat_hash_map<absl::string_view, std::string>* variables);
+  // Emits the members every oneof case shares; call after SetCommonOneofFieldVariables.
+  void GenerateOneofCaseMembers(io::Printer* printer);
 
   std::string oneof_property_name();
   std::string oneof_case_name(); 

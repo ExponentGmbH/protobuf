@@ -33,8 +33,10 @@ PrimitiveFieldGenerator::PrimitiveFieldGenerator(
   is_value_type = descriptor->type() != FieldDescriptor::TYPE_STRING
       && descriptor->type() != FieldDescriptor::TYPE_BYTES;
   if (!is_value_type && !SupportsPresenceApi(descriptor_)) {
-    variables_["has_property_check"] = variables_["property_name"] + ".Length != 0";
-    variables_["other_has_property_check"] = "other." + variables_["property_name"] + ".Length != 0";
+    // A struct's string and bytes fields are null until assigned: it cannot initialize them, and a parse skips absent ones.
+    const std::string non_empty = FieldInsideReferenceContainer(*descriptor_) ? ".Length != 0" : "?.Length > 0";
+    variables_["has_property_check"] = variables_["property_name"] + non_empty;
+    variables_["other_has_property_check"] = "other." + variables_["property_name"] + non_empty;
     variables_["property_name_existing"] = variables_["property_name"];
     variables_["other_property_name_existing"] = "other." + variables_["property_name"];
   }
@@ -346,63 +348,13 @@ PrimitiveOneofFieldGenerator::PrimitiveOneofFieldGenerator(
     const FieldDescriptor* descriptor, int presenceIndex, const Options *options)
     : PrimitiveFieldGenerator(descriptor, presenceIndex, options) {
   SetCommonOneofFieldVariables(&variables_);
-  variables_["capitalized_oneof_name"] = UnderscoresToCamelCase(oneof_name(), true);
 }
 
 PrimitiveOneofFieldGenerator::~PrimitiveOneofFieldGenerator() {
 }
 
 void PrimitiveOneofFieldGenerator::GenerateMembers(io::Printer* printer) {
-  WritePropertyDocComment(printer, options(), descriptor_);
-  AddPublicMemberAttributes(printer);
-  printer->Print(
-    variables_,
-    "$access_level$ $type_name$? $property_name$ {\n"
-    "  get { return $property_name$_Internal; }\n"
-    "  init { $property_name$_Internal = value; }\n"
-    "}\n");
-  printer->Print(
-    variables_,
-    "private $type_name$? $property_name$_Internal {\n"
-    "  get { return $has_property_check_internal$ && $oneof_name$_ is $type_name$ value ? value : null; }\n"
-    "  set {\n");
-  if (is_value_type) {
-    printer->Print(
-      variables_,
-      "    if (value == null) { Clear$capitalized_oneof_name$(); return; }\n"
-      "    $oneof_name$_ = value.Value;\n");
-  } else {
-    printer->Print(
-      variables_,
-      "    $oneof_name$_ = value; if (value == null) { Clear$capitalized_oneof_name$(); return; }\n");
-  }
-  printer->Print(
-    variables_,
-    "    $oneof_name$Case_ = $oneof_property_name$OneofCase.$oneof_case_name$;\n"
-    "  }\n"
-    "}\n");
-  if (SupportsPresenceApi(descriptor_)) {
-    printer->Print(
-      variables_,
-      "/// <summary>Gets whether the \"$descriptor_name$\" field is set</summary>\n");
-    AddPublicMemberAttributes(printer);
-    printer->Print(
-      variables_,
-      "$access_level$ bool Has$property_name$ {\n"
-      "  get { return $oneof_name$Case_ == $oneof_property_name$OneofCase.$oneof_case_name$; }\n"
-      "}\n");
-    printer->Print(
-      variables_,
-      "/// <summary> Clears the value of the oneof if it's currently set to \"$descriptor_name$\" </summary>\n");
-    AddPublicMemberAttributes(printer);
-    printer->Print(
-      variables_,
-      "private void Clear$property_name$() {\n"
-      "  if ($has_property_check$) {\n"
-      "    Clear$oneof_property_name$();\n"
-      "  }\n"
-      "}\n");
-  }
+  GenerateOneofCaseMembers(printer);
 }
 
 void PrimitiveOneofFieldGenerator::GenerateMergingCode(io::Printer* printer) {
@@ -411,7 +363,7 @@ void PrimitiveOneofFieldGenerator::GenerateMergingCode(io::Printer* printer) {
 
 void PrimitiveOneofFieldGenerator::WriteToString(io::Printer* printer) {
   printer->Print(variables_,
-    "PrintField(\"$descriptor_name$\", $has_property_check$, $oneof_name$_, writer);\n");
+    "PrintField(\"$descriptor_name$\", $has_property_check$, $property_name$, writer);\n");
 }
 
 void PrimitiveOneofFieldGenerator::GenerateParsingCode(io::Printer* printer) {
@@ -426,6 +378,7 @@ void PrimitiveOneofFieldGenerator::GenerateCloningCode(io::Printer* printer) {
 }
 
 void PrimitiveOneofFieldGenerator:: GenerateStructConstructorCode(io::Printer *printer) {
+  printer->Print(variables_, "$name$_ = default;\n");
 }
 
 }  // namespace csharp

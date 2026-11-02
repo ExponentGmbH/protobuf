@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reflection;
 using Google.Protobuf.Collections;
 using Google.Protobuf.Compatibility;
 
@@ -181,7 +182,10 @@ namespace Google.Protobuf.Reflection
                 {
                     throw new ArgumentException($"Cannot read from property {clrName}Case in {containingType.ClrType}");
                 }
-                var clearMethod = containingType.ClrType.GetMethod("Clear" + clrName);
+                // Generated records keep this method private because clearing would mutate them.
+                var clearMethod = containingType.ClrType.GetMethod(
+                    name: "Clear" + clrName,
+                    bindingAttr: BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 if (clearMethod == null)
                 {
                     throw new DescriptorValidationException(this, $"Method Clear{clrName} not found in {containingType.ClrType}");

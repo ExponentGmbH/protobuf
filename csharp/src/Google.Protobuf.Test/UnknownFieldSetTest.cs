@@ -53,12 +53,15 @@ namespace Google.Protobuf
         {
             var emptyMessage = new TestEmptyMessage();
             emptyMessage.MergeFrom(message.ToByteArray());
-            Assert.AreEqual(message.CalculateSize(), emptyMessage.CalculateSize());
-            Assert.AreEqual(message.ToByteArray(), emptyMessage.ToByteArray());
+
+            // Unknown fields are retained in memory but never written (WRITE_UNKNOWNS is not defined).
+            Assert.AreNotEqual(new TestEmptyMessage(), emptyMessage);
+            Assert.AreEqual(0, emptyMessage.CalculateSize());
+            Assert.IsEmpty(emptyMessage.ToByteArray());
 
             var newMessage = message.Descriptor.Parser.ParseFrom(emptyMessage.ToByteArray());
-            Assert.AreEqual(message, newMessage);
-            Assert.AreEqual(message.CalculateSize(), newMessage.CalculateSize());
+            Assert.AreEqual(message.Descriptor.Parser.ParseFrom(new byte[0]), newMessage);
+            Assert.AreEqual(0, newMessage.CalculateSize());
         }
 
         [Test]
@@ -70,8 +73,11 @@ namespace Google.Protobuf
             emptyMessage.MergeFrom(message.ToByteArray());
             otherEmptyMessage.MergeFrom(emptyMessage);
 
-            Assert.AreEqual(message.CalculateSize(), otherEmptyMessage.CalculateSize());
-            Assert.AreEqual(message.ToByteArray(), otherEmptyMessage.ToByteArray());
+            // Merging copies the retained unknown fields in memory, but nothing is written.
+            Assert.AreEqual(emptyMessage, otherEmptyMessage);
+            Assert.AreNotEqual(new TestEmptyMessage(), otherEmptyMessage);
+            Assert.AreEqual(0, otherEmptyMessage.CalculateSize());
+            Assert.IsEmpty(otherEmptyMessage.ToByteArray());
         }
 
         [Test]
@@ -82,8 +88,8 @@ namespace Google.Protobuf
             var otherEmptyMessage = new TestEmptyMessage();
             Assert.AreEqual(emptyMessage, otherEmptyMessage);
             emptyMessage.MergeFrom(message.ToByteArray());
-            Assert.AreNotEqual(emptyMessage.CalculateSize(),
-                               otherEmptyMessage.CalculateSize());
+            // Unknown fields take part in equality even though they are not written.
+            Assert.AreEqual(emptyMessage.CalculateSize(), otherEmptyMessage.CalculateSize());
             Assert.AreNotEqual(emptyMessage, otherEmptyMessage);
         }
 
@@ -108,8 +114,11 @@ namespace Google.Protobuf
 
             emptyMessage.MergeFrom(message.ToByteArray());
             otherEmptyMessage = emptyMessage.Clone();
-            Assert.AreEqual(message.CalculateSize(), otherEmptyMessage.CalculateSize());
-            Assert.AreEqual(message.ToByteArray(), otherEmptyMessage.ToByteArray());
+            // The clone keeps the unknown fields in memory but writes nothing for them.
+            Assert.AreEqual(emptyMessage, otherEmptyMessage);
+            Assert.AreNotEqual(new TestEmptyMessage(), otherEmptyMessage);
+            Assert.AreEqual(0, otherEmptyMessage.CalculateSize());
+            Assert.IsEmpty(otherEmptyMessage.ToByteArray());
         }
 
         [Test]
@@ -141,7 +150,6 @@ namespace Google.Protobuf
         {
             var goldenEmptyMessage = new TestEmptyMessage();
             byte[] data = message.ToByteArray();
-            int fullSize = message.CalculateSize();
 
             void AssertEmpty(IMessage msg)
             {
@@ -149,7 +157,12 @@ namespace Google.Protobuf
                 Assert.AreEqual(goldenEmptyMessage, msg);
             }
 
-            void AssertFull(IMessage msg) => Assert.AreEqual(fullSize, msg.CalculateSize());
+            // Retained unknown fields are not written, so only equality tells them from a discarded parse.
+            void AssertFull(IMessage msg)
+            {
+                Assert.AreEqual(0, msg.CalculateSize());
+                Assert.AreNotEqual(goldenEmptyMessage, msg);
+            }
 
             // Test the behavior of the parsers with and without discarding, both generic and non-generic.
             MessageParser<TestEmptyMessage> retainingParser1 = TestEmptyMessage.Parser;

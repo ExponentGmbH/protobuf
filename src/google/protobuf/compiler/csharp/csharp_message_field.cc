@@ -149,7 +149,7 @@ void MessageFieldGenerator::GenerateParsingCode(io::Printer* printer) {
       variables_,
       "if (!($has_property_check$)) {\n"
       "  $property_name_existing$ = new $type_name$();\n"
-      "}\n");
+      "} else { $property_name_existing$ = new $type_name$($property_name_existing$); }\n");
   }
   if (MessageFieldIsValueType(*descriptor_)) {
     if (descriptor_->type() == FieldDescriptor::Type::TYPE_MESSAGE) {
@@ -294,66 +294,18 @@ MessageOneofFieldGenerator::~MessageOneofFieldGenerator() {
 }
 
 void MessageOneofFieldGenerator::GenerateMembers(io::Printer* printer) {
-  WritePropertyDocComment(printer, options(), descriptor_);
-  AddPublicMemberAttributes(printer);
-  printer->Print(
-      variables_,
-      "$access_level$ $type_name$? $property_name$ {\n"
-      "  get { return $property_name$_Internal; }\n");
-  if (FieldInsideReferenceContainer(*descriptor_)) {
-    printer->Print(
-        variables_,
-        "  init {\n");
-  } else {
-    printer->Print(
-        variables_,
-        "  set {\n");
-  }
-  printer->Print(
-    variables_,
-    "    $property_name$_Internal = value;\n"
-    "  }\n"
-    "}\n");
-
-  printer->Print(
-    variables_,
-    "private $type_name$? $property_name$_Internal {\n"
-    "  get { return $has_property_check_internal$ && $oneof_name$_ is $type_name$ value ? value : null; }\n"
-    "  set {\n"
-    "    $oneof_name$_ = value;\n"
-    "    $oneof_name$Case_ = value == null ? $oneof_property_name$OneofCase.None : $oneof_property_name$OneofCase.$oneof_case_name$;\n"
-    "  }\n"
-    "}\n");
-  if (SupportsPresenceApi(descriptor_)) {
-    printer->Print(
-      variables_,
-      "/// <summary>Gets whether the \"$descriptor_name$\" field is set</summary>\n");
-    AddPublicMemberAttributes(printer);
-    printer->Print(
-      variables_,
-      "$access_level$ bool Has$property_name$ {\n"
-      "  get { return $oneof_name$Case_ == $oneof_property_name$OneofCase.$oneof_case_name$; }\n"
-      "}\n");
-    printer->Print(
-      variables_,
-      "/// <summary> Clears the value of the oneof if it's currently set to \"$descriptor_name$\" </summary>\n");
-    AddPublicMemberAttributes(printer);
-    printer->Print(
-      variables_,
-      "private void Clear$property_name$() {\n"
-      "  if ($has_property_check$) {\n"
-      "    Clear$oneof_property_name$();\n"
-      "  }\n"
-      "}\n");
-  }
+  GenerateOneofCaseMembers(printer);
 }
 
 void MessageOneofFieldGenerator::GenerateMergingCode(io::Printer* printer) {
+  // Merging into the property's value would only reach a copy when the case is a struct. Records also merge into a
+  // copy, because the current value may be shared with other messages.
   printer->Print(variables_,
-    "if ($property_name$ == null) {\n"
-    "  $property_name$_Internal = new $type_name$();\n"
-    "} else { $property_name$_Internal = new $type_name$($property_name$); }\n"
-    "$property_name$?.MergeFrom(other.$property_name$);\n");
+    "if ($other_has_property_check$) {\n"
+    "  $type_name$ $property_name$Merged = $has_property_check$ ? new $type_name$($property_name_existing$) : new $type_name$();\n"
+    "  $property_name$Merged.MergeFrom($other_property_name_existing$);\n"
+    "  $property_name$_Internal = $property_name$Merged;\n"
+    "}\n");
 }
 
 void MessageOneofFieldGenerator::GenerateParsingCode(io::Printer* printer) {
@@ -362,20 +314,33 @@ void MessageOneofFieldGenerator::GenerateParsingCode(io::Printer* printer) {
     variables_,
     "$type_name$ subBuilder = new $type_name$();\n"
     "if ($has_property_check$) {\n"
-    "  subBuilder.MergeFrom($property_name$);\n"
+    "  subBuilder.MergeFrom($property_name_existing$);\n"
     "}\n");
-  if (descriptor_->type() == FieldDescriptor::Type::TYPE_MESSAGE) {
-    printer->Print("input.ReadMessage(subBuilder);\n");
-  } else {
-    printer->Print("input.ReadGroup(subBuilder);\n");
+  // Passing a struct straight to ReadMessage would box a copy and lose what was read, so the box has to be kept.
+  const bool struct_case = MessageFieldIsValueType(*descriptor_);
+  if (struct_case) {
+    printer->Print("pb::IMessage boxedSubBuilder = subBuilder;\n");
   }
-  printer->Print(variables_, "$property_name$_Internal = subBuilder;\n");
+  variables_["read_target"] = struct_case ? "boxedSubBuilder" : "subBuilder";
+  variables_["read_result"] = struct_case ? absl::StrCat("(", type_name(), ") boxedSubBuilder") : "subBuilder";
+  if (descriptor_->type() == FieldDescriptor::Type::TYPE_MESSAGE) {
+    printer->Print(variables_, "input.ReadMessage($read_target$);\n");
+  } else {
+    printer->Print(variables_, "input.ReadGroup($read_target$);\n");
+  }
+  printer->Print(variables_, "$property_name$_Internal = $read_result$;\n");
 }
 
 void MessageOneofFieldGenerator::WriteToString(io::Printer* printer) {
   printer->Print(
     variables_,
-    "PrintField(\"$descriptor_name$\", $has_property_check$, $oneof_name$_, writer);\n");
+    "PrintField(\"$descriptor_name$\", $has_property_check$, $property_name$, writer);\n");
+}
+
+void MessageOneofFieldGenerator::WriteEquals(io::Printer* printer) {
+  printer->Print(
+    variables_,
+    "if (!scg::EqualityComparer<$type_at_rest$>.Default.Equals($property_name$, other.$property_name$)) return false;\n");
 }
 
 void MessageOneofFieldGenerator::GenerateCloningCode(io::Printer* printer) {
@@ -384,6 +349,7 @@ void MessageOneofFieldGenerator::GenerateCloningCode(io::Printer* printer) {
 }
 
 void MessageOneofFieldGenerator::GenerateStructConstructorCode(io::Printer *printer) {
+  printer->Print(variables_, "$name$_ = default;\n");
 }
 
 }  // namespace csharp

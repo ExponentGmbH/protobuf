@@ -36,7 +36,13 @@ namespace Google.Protobuf.Reflection
             {
                 throw new ArgumentException("Not all required properties/methods available");
             }
-            setValueDelegate = ReflectionUtil.CreateActionIMessageObject(property.GetSetMethod());
+            Action<IMessage, object> propertySetter = ReflectionUtil.CreateActionIMessageObject(property.GetSetMethod());
+            // JsonParser hands over enum values as boxed ints. Those unbox to an enum property but not to the nullable
+            // enum property of a generated record's oneof case, where the cast throws InvalidCastException.
+            Type maybeNullableEnum = Nullable.GetUnderlyingType(property.PropertyType);
+            setValueDelegate = maybeNullableEnum != null && maybeNullableEnum.GetTypeInfo().IsEnum
+                ? (message, value) => propertySetter(message, value == null ? null : Enum.ToObject(enumType: maybeNullableEnum, value: value))
+                : propertySetter;
 
             // Note: this looks worrying in that we access the containing oneof, which isn't valid until cross-linking
             // is complete... but field accessors aren't created until after cross-linking.
@@ -46,8 +52,13 @@ namespace Google.Protobuf.Reflection
             // Message fields always support presence, via null checks.
             if (descriptor.FieldType == FieldType.Message)
             {
-                hasDelegate = message => GetValue(message) != null;
-                clearDelegate = message => SetValue(message, null);
+                // A non-nullable struct property cannot be null: its unset value is its default, which the wire format
+                // also omits, and the setter delegate would throw unboxing null.
+                object cleared = property.PropertyType.IsValueType && Nullable.GetUnderlyingType(property.PropertyType) == null
+                    ? Activator.CreateInstance(type: property.PropertyType)
+                    : null;
+                hasDelegate = message => !Equals(GetValue(message), cleared);
+                clearDelegate = message => SetValue(message, cleared);
             }
             // Oneof fields always support presence, via case checks.
             // Note that clearing the field is a no-op unless that specific field is the current "case".
@@ -95,7 +106,7 @@ namespace Google.Protobuf.Reflection
             }
         }
 
-        private static object GetDefaultValue(FieldDescriptor descriptor) =>
+        internal static object GetDefaultValue(FieldDescriptor descriptor) =>
             descriptor.FieldType switch
             {
                 FieldType.Bool => false,

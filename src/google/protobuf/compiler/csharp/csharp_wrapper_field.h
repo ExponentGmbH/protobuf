@@ -65,7 +65,6 @@ class WrapperOneofFieldGenerator : public WrapperFieldGenerator {
   virtual void GenerateSerializationCode(io::Printer* printer) override;
   virtual void GenerateSerializationCode(io::Printer* printer, bool use_write_context) override;
   virtual void GenerateSerializedSizeCode(io::Printer* printer) override;
-  virtual void GenerateStructConstructorCode(io::Printer *printer) override;
 };
 
 }  // namespace csharp

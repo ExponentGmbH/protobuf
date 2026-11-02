@@ -73,19 +73,22 @@ void MapFieldGenerator::GenerateMembers(io::Printer* printer) {
   }
   WritePropertyDocComment(printer, options(), descriptor_);
   AddPublicMemberAttributes(printer);
+  // A parsed map lives in a MapField, whose object must not be handed out: a cast would reach its Add and Clear.
   printer->Print(
       variables_,
       "$access_level$ scg::IReadOnlyDictionary<$key_type_name$, $value_type_name$> $property_name$ {\n"
-      "  get { return ($name$_imm ?? $name$_pb) ?? sci.ImmutableDictionary<$key_type_name$, $value_type_name$>.Empty; }\n"
+      "  get { return $name$_imm ?? ($name$_pb != null ? (scg::IReadOnlyDictionary<$key_type_name$, $value_type_name$>) new global::System.Collections.ObjectModel.ReadOnlyDictionary<$key_type_name$, $value_type_name$>($name$_pb) : sci.ImmutableDictionary<$key_type_name$, $value_type_name$>.Empty); }\n"
       "  $setter$ { if (value is sci.ImmutableDictionary<$key_type_name$, $value_type_name$>) { $name$_imm = value; } else { $name$_imm = sci.ImmutableDictionary.CreateRange(value); } $name$_pb = null; }\n"
       "}\n"
+      // Size, hash, equality and merge read through this, so that they don't allocate the public getter's wrapper.
+      "private scg::IReadOnlyDictionary<$key_type_name$, $value_type_name$> $name$_ForReading { get { return $name$_imm ?? (scg::IReadOnlyDictionary<$key_type_name$, $value_type_name$>?) $name$_pb ?? sci.ImmutableDictionary<$key_type_name$, $value_type_name$>.Empty; } }\n"
       "private pbc::MapField<$key_type_name$, $value_type_name$> $name$_ForSerialization { get { return $name$_imm != null || $name$_pb == null ? new pbc::MapField<$key_type_name$, $value_type_name$>($name$_imm ?? sci.ImmutableDictionary<$key_type_name$, $value_type_name$>.Empty) : $name$_pb; } }\n"
       "private pbc::MapField<$key_type_name$, $value_type_name$> $name$_ForMutation { get {  if ($name$_imm != null) { $name$_pb = new pbc::MapField<$key_type_name$, $value_type_name$>($name$_imm); $name$_imm = null; } if ($name$_pb == null) { $name$_pb = new pbc::MapField<$key_type_name$, $value_type_name$>(); } return $name$_pb; } }\n");
 }
 
 void MapFieldGenerator::GenerateMergingCode(io::Printer* printer) {
   printer->Print(variables_,
-                 "if (other.$property_name$.Count > 0) { var $name$_new = new pbc::MapField<$key_type_name$, $value_type_name$>($property_name$); $name$_new.MergeFrom(other.$property_name$); $name$_imm = null; $name$_pb = $name$_new; }\n");
+                 "if (other.$name$_ForReading.Count > 0) { var $name$_new = new pbc::MapField<$key_type_name$, $value_type_name$>($name$_ForReading); $name$_new.MergeFrom(other.$name$_ForReading); $name$_imm = null; $name$_pb = $name$_new; }\n");
 }
 
 void MapFieldGenerator::GenerateParsingCode(io::Printer* printer) {
@@ -98,6 +101,12 @@ void MapFieldGenerator::GenerateParsingCode(io::Printer* printer, bool use_parse
     use_parse_context
     ? "$name$_ForMutation.AddEntriesFrom(ref input, _map_$name$_codec);\n"
     : "$name$_ForMutation.AddEntriesFrom(input, _map_$name$_codec);\n");
+}
+
+void MapFieldGenerator::GenerateParseLoopPrologue(io::Printer* printer) {
+  // Copies of a message share its parsed MapField, which is what makes them cheap, so a parse takes its own first.
+  printer->Print(variables_,
+    "if ($name$_pb != null) { $name$_pb = new pbc::MapField<$key_type_name$, $value_type_name$>($name$_pb); }\n");
 }
 
 void MapFieldGenerator::GenerateSerializationCode(io::Printer* printer) {
@@ -115,18 +124,18 @@ void MapFieldGenerator::GenerateSerializationCode(io::Printer* printer, bool use
 void MapFieldGenerator::GenerateSerializedSizeCode(io::Printer* printer) {
   printer->Print(
     variables_,
-    "size += pbc::MapField<$key_type_name$, $value_type_name$>.MapFieldCalculateSize(_map_$name$_codec, $property_name$);\n");
+    "size += pbc::MapField<$key_type_name$, $value_type_name$>.MapFieldCalculateSize(_map_$name$_codec, $name$_ForReading);\n");
 }
 
 void MapFieldGenerator::WriteHash(io::Printer* printer) {
   printer->Print(
     variables_,
-    "hash ^= pbc::MapField<$key_type_name$, $value_type_name$>.GetMapFieldHashCode($property_name$);\n");
+    "hash ^= pbc::MapField<$key_type_name$, $value_type_name$>.GetMapFieldHashCode($name$_ForReading);\n");
 }
 void MapFieldGenerator::WriteEquals(io::Printer* printer) {
   printer->Print(
     variables_,
-    "if (!pbc::MapField<$key_type_name$, $value_type_name$>.MapFieldEquals(this.$property_name$, other.$property_name$)) return false;\n");
+    "if (!pbc::MapField<$key_type_name$, $value_type_name$>.MapFieldEquals(this.$name$_ForReading, other.$name$_ForReading)) return false;\n");
 }
 
 void MapFieldGenerator::WriteToString(io::Printer* printer) {

@@ -66,14 +66,15 @@ namespace Google.Protobuf.WellKnownTypes
         {
             // Note: this doesn't perform as well is it might. We could take a MessageParser<T> in an alternative overload,
             // which would be expected to perform slightly better... although the difference is likely to be negligible.
-            T target = new T();
+            // Held as IMessage: MergeFrom on a struct T would box a copy, and the data would land there.
+            IMessage target = new T();
             if (GetTypeName(TypeUrl) != target.Descriptor.FullName)
             {
                 throw new InvalidProtocolBufferException(
                     $"Full type name for {target.Descriptor.Name} is {target.Descriptor.FullName}; Any message's type url is {TypeUrl}");
             }
-            target.MergeFrom(Value);
-            return target;
+            target.MergeFrom(data: Value, discardUnknownFields: false, registry: null);
+            return (T) target;
         }
 
         /// <summary>
@@ -86,14 +87,15 @@ namespace Google.Protobuf.WellKnownTypes
         {
             // Note: deliberately avoid writing anything to result until the end, in case it's being
             // monitored by other threads. (That would be a bug in the calling code, but let's not make it worse.)
-            T target = new T();
+            // Held as IMessage: MergeFrom on a struct T would box a copy, and the data would land there.
+            IMessage target = new T();
             if (GetTypeName(TypeUrl) != target.Descriptor.FullName)
             {
                 result = default; // Can't use null as there's no class constraint, but this always *will* be null in real usage.
                 return false;
             }
-            target.MergeFrom(Value);
-            result = target;
+            target.MergeFrom(data: Value, discardUnknownFields: false, registry: null);
+            result = (T) target;
             return true;
         }
 
@@ -113,7 +115,7 @@ namespace Google.Protobuf.WellKnownTypes
             }
 
             var message = descriptor.Parser.CreateTemplate();
-            message.MergeFrom(Value);
+            message.MergeFrom(data: Value, discardUnknownFields: false, registry: null);
             return message;
         }
 

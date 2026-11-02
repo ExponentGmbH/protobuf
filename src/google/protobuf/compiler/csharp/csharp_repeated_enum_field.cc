@@ -30,6 +30,10 @@ RepeatedEnumFieldGenerator::RepeatedEnumFieldGenerator(
   variables_["setter"] = FieldInsideReferenceContainer(*descriptor_) ? "init" : "set";
   variables_["repeated_type"] = RepeatedFieldType(*descriptor_);
   variables_["repeated_type_classname"] = RepeatedFieldTypeClassName(*descriptor_);
+  // A struct cannot initialize its field, and default(ImmutableArray<T>) throws when used, so null stands for empty.
+  variables_["repeated_read"] = FieldInsideReferenceContainer(*descriptor_)
+      ? absl::StrCat(name(), "_")
+      : absl::StrCat("(", name(), "_ ?? ", RepeatedFieldType(*descriptor_), "<", variables_["type_name"], ">.Empty)");
 }
 
 RepeatedEnumFieldGenerator::~RepeatedEnumFieldGenerator() {
@@ -58,10 +62,10 @@ void RepeatedEnumFieldGenerator::GenerateMembers(io::Printer* printer) {
   printer->Print(
     variables_,
     "$access_level$ $repeated_type$<$type_name$> $property_name$ {\n"
-    "  get { return $name$_; }\n"
+    "  get { return $repeated_read$; }\n"
     "  $setter$ { $name$_ = value; }\n"
     "}\n"
-    "private pbc::RepeatedField<$type_name$> $name$_ForSerialization { get { return pbc::RepeatedField<$type_name$>.From($name$_); } }\n"
+    "private pbc::RepeatedField<$type_name$> $name$_ForSerialization { get { return pbc::RepeatedField<$type_name$>.From($repeated_read$); } }\n"
     );
 }
 
@@ -79,8 +83,18 @@ void RepeatedEnumFieldGenerator::GenerateParsingCode(io::Printer* printer, bool 
   printer->Print(
       variables_,
       use_parse_context
-          ? "var $name$_mutation = new pbc::RepeatedField<$type_name$>(); $name$_mutation.AddEntriesFrom(ref input, _repeated_$name$_codec); $name$_ = $name$_mutation.To$repeated_type_classname$();\n"
-          : "var $name$_mutation = new pbc::RepeatedField<$type_name$>(); $name$_mutation.AddEntriesFrom(input, _repeated_$name$_codec); $name$_ = $name$_mutation.To$repeated_type_classname$();\n");
+          ? "($name$_mutation ??= new pbc::RepeatedField<$type_name$>()).AddEntriesFrom(ref input, _repeated_$name$_codec);\n"
+          : "($name$_mutation ??= new pbc::RepeatedField<$type_name$>()).AddEntriesFrom(input, _repeated_$name$_codec);\n");
+}
+
+void RepeatedEnumFieldGenerator::GenerateParseLoopPrologue(io::Printer* printer) {
+  // Runs of this field may be split by other fields on the wire, and each run appends. Appending to the immutable
+  // collection per run would make a hostile message of alternating fields quadratic, so they are collected first.
+  printer->Print(variables_, "pbc::RepeatedField<$type_name$>? $name$_mutation = null;\n");
+}
+
+void RepeatedEnumFieldGenerator::GenerateParseLoopEpilogue(io::Printer* printer) {
+  printer->Print(variables_, "if ($name$_mutation != null) { $name$_ = $property_name$.AddRange($name$_mutation); }\n");
 }
 
 void RepeatedEnumFieldGenerator::GenerateSerializationCode(io::Printer* printer) {
@@ -138,7 +152,7 @@ void RepeatedEnumFieldGenerator::GenerateFreezingCode(io::Printer* printer) {
 
 void RepeatedEnumFieldGenerator::GenerateStructConstructorCode(io::Printer *printer) {
   printer->Print(variables_,
-                 "$name$_ = $repeated_type$<T>.Empty;\n");
+                 "$name$_ = default;\n");
 }
 
 }  // namespace csharp

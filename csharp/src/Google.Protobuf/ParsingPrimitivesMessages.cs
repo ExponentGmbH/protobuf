@@ -234,7 +234,10 @@ namespace Google.Protobuf
                 try
                 {
                     // fallback parse using the CodedInputStream that started current parsing tree
+                    // Only a message without IBufferMessage gets here; this is its one parsing entry point and it is the parse target.
+#pragma warning disable CS0618
                     message.MergeFrom(ctx.state.CodedInputStream);
+#pragma warning restore CS0618
                 }
                 finally
                 {

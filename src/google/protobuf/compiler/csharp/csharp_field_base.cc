@@ -14,6 +14,8 @@
 
 #include "google/protobuf/compiler/code_generator.h"
 #include "absl/log/absl_log.h"
+#include "absl/strings/match.h"
+#include "google/protobuf/compiler/csharp/csharp_doc_comment.h"
 #include "google/protobuf/compiler/csharp/csharp_helpers.h"
 #include "google/protobuf/compiler/csharp/names.h"
 #include "google/protobuf/descriptor.h"
@@ -30,6 +32,22 @@ namespace google {
 namespace protobuf {
 namespace compiler {
 namespace csharp {
+
+namespace {
+
+// Whether the case's own C# type is a non-nullable value type, so that its property's `T?` has to be unwrapped.
+// Wrappers of value types are excluded because their C# type is already `int?`.
+bool OneofCaseIsNonNullableValueType(const FieldDescriptor& field) {
+  if (field.cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
+    return false;
+  }
+  if (field.cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE) {
+    return true;
+  }
+  return !IsWrapperType(&field) && MessageFieldIsValueType(field);
+}
+
+}  // namespace
 
 void FieldGeneratorBase::SetCommonFieldVariables(
     absl::flat_hash_map<absl::string_view, std::string>* variables) {
@@ -188,6 +206,67 @@ void FieldGeneratorBase::SetCommonOneofFieldVariables(
 
   (*variables)["oneof_case_name"] = oneof_case_name();
   (*variables)["oneof_property_name"] = oneof_property_name();
+
+  const std::string type = type_name();
+  const std::string nullable_type = absl::EndsWith(type, "?") ? type : absl::StrCat(type, "?");
+  const bool non_nullable_value_type = OneofCaseIsNonNullableValueType(*descriptor_);
+  (*variables)["type_at_rest"] = nullable_type;
+  (*variables)["oneof_case_field_type"] = non_nullable_value_type ? type : nullable_type;
+  (*variables)["oneof_case_written_value"] = non_nullable_value_type ? "value.Value" : "value";
+
+  // A record shares one object field between its cases, so its value-type cases box. A struct exists to avoid heap
+  // allocation, so each of its cases gets a field of its own type.
+  const std::string case_field = absl::StrCat(name(), "_");
+  const std::string shared_field = absl::StrCat(oneof_name(), "_");
+  const bool owned_by_record = FieldInsideReferenceContainer(*descriptor_);
+  (*variables)["oneof_case_storage"] = owned_by_record ? shared_field : case_field;
+  (*variables)["oneof_case_read"] = owned_by_record ? absl::StrCat("(", type, ") ", shared_field, "!") : case_field;
+  (*variables)["property_setter"] = owned_by_record ? "init" : "set";
+}
+
+void FieldGeneratorBase::GenerateOneofCaseMembers(io::Printer* printer) {
+  if (!FieldInsideReferenceContainer(*descriptor_)) {
+    printer->Print(
+      variables_,
+      "private $oneof_case_field_type$ $name$_;\n"
+      "public static $type_at_rest$ __$property_name$($extended_type$ message) { return message.$property_name$; }\n"
+      "public static bool __$property_name$_has_value($extended_type$ message) { return message.$oneof_name$Case_ == $oneof_property_name$OneofCase.$oneof_case_name$; }\n");
+  }
+  WritePropertyDocComment(printer, options(), descriptor_);
+  AddPublicMemberAttributes(printer);
+  // The clear comes first so that in a struct the only non-default case field is the active one, and a stale reference
+  // in a case field that was switched away from cannot keep its target alive.
+  printer->Print(
+    variables_,
+    "$access_level$ $type_at_rest$ $property_name$ {\n"
+    "  get { return $property_name$_Internal; }\n"
+    "  $property_setter$ { $property_name$_Internal = value; }\n"
+    "}\n"
+    "private $type_at_rest$ $property_name$_Internal {\n"
+    "  get { return $has_property_check_internal$ ? $oneof_case_read$ : ($type_at_rest$) null; }\n"
+    "  set {\n"
+    "    Clear$oneof_property_name$();\n"
+    "    if (value == null) { return; }\n"
+    "    $oneof_case_storage$ = $oneof_case_written_value$;\n"
+    "    $oneof_name$Case_ = $oneof_property_name$OneofCase.$oneof_case_name$;\n"
+    "  }\n"
+    "}\n"
+    "/// <summary>Gets whether the \"$descriptor_name$\" field is set</summary>\n");
+  AddPublicMemberAttributes(printer);
+  printer->Print(
+    variables_,
+    "$access_level$ bool Has$property_name$ {\n"
+    "  get { return $oneof_name$Case_ == $oneof_property_name$OneofCase.$oneof_case_name$; }\n"
+    "}\n"
+    "/// <summary> Clears the value of the oneof if it's currently set to \"$descriptor_name$\" </summary>\n");
+  AddPublicMemberAttributes(printer);
+  printer->Print(
+    variables_,
+    "private void Clear$property_name$() {\n"
+    "  if ($oneof_name$Case_ == $oneof_property_name$OneofCase.$oneof_case_name$) {\n"
+    "    Clear$oneof_property_name$();\n"
+    "  }\n"
+    "}\n");
 }
 
 FieldGeneratorBase::FieldGeneratorBase(const FieldDescriptor* descriptor,
@@ -204,6 +283,14 @@ FieldGeneratorBase::~FieldGeneratorBase() {
 void FieldGeneratorBase::GenerateFreezingCode(io::Printer* printer) {
   // No-op: only message fields and repeated fields need
   // special handling for freezing, so default to not generating any code.
+}
+
+void FieldGeneratorBase::GenerateParseLoopPrologue(io::Printer* printer) {
+  // No-op: most fields keep nothing between their occurrences on the wire.
+}
+
+void FieldGeneratorBase::GenerateParseLoopEpilogue(io::Printer* printer) {
+  // No-op: most fields keep nothing between their occurrences on the wire.
 }
 
 void FieldGeneratorBase::GenerateCodecCode(io::Printer* printer) {

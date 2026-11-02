@@ -467,7 +467,8 @@ bool EmbedReadOnlyRefField(const FieldDescriptor &field) {
 }
 
 bool MessageFieldIsValueType(const FieldDescriptor &field) {
-  if (field.type() != FieldDescriptor::TYPE_MESSAGE || field.message_type() == nullptr) {
+  if ((field.type() != FieldDescriptor::TYPE_MESSAGE && field.type() != FieldDescriptor::TYPE_GROUP) ||
+      field.message_type() == nullptr) {
       ABSL_LOG(FATAL) << "Not a message field";
   }
   return !MessageIsReference(*field.message_type());

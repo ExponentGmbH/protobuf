@@ -263,12 +263,11 @@ namespace Google.Protobuf
                         continue;
                     }
 
-                    if (destinationField == null)
-                    {
-                        // If we have to merge but the destination does not contain the field, create it.
-                        destinationField = field.MessageType.Parser.CreateTemplate();
-                        field.Accessor.SetValue(destination, destinationField);
-                    }
+                    // If we have to merge but the destination does not contain the field, create it. If it does, merge into
+                    // a copy, because other messages may hold that record, and store the copy below.
+                    destinationField = destinationField == null
+                        ? field.MessageType.Parser.CreateTemplate()
+                        : CloneMessage(message: (IMessage)destinationField);
 
                     if (sourceField == null)
                     {
@@ -279,6 +278,7 @@ namespace Google.Protobuf
 
                     var childPath = path.Length == 0 ? entry.Key : path + "." + entry.Key;
                     Merge(entry.Value, childPath, (IMessage)sourceField, (IMessage)destinationField, options);
+                    field.Accessor.SetValue(destination, destinationField);
                     continue;
                 }
 
@@ -291,6 +291,11 @@ namespace Google.Protobuf
 
                     var sourceField = (IList)field.Accessor.GetValue(source);
                     var destinationField = (IList)field.Accessor.GetValue(destination);
+                    if (destinationField.IsReadOnly)
+                    {
+                        field.Accessor.SetValue(destination, ImmutableFieldCollections.Append(current: destinationField, items: sourceField));
+                        continue;
+                    }
                     foreach (var element in sourceField)
                     {
                         destinationField.Add(element);
@@ -328,7 +333,10 @@ namespace Google.Protobuf
                                     var destinationValue = (IMessage)field.Accessor.GetValue(destination);
                                     if (destinationValue != null)
                                     {
-                                        destinationValue.MergeFrom(sourceByteString);
+                                        // Merge into a copy, because other messages may hold that record.
+                                        IMessage merged = CloneMessage(message: destinationValue);
+                                        merged.MergeFrom(data: sourceByteString, discardUnknownFields: false, registry: null);
+                                        field.Accessor.SetValue(destination, merged);
                                     }
                                     else
                                     {
@@ -353,5 +361,8 @@ namespace Google.Protobuf
                 }
             }
         }
+
+        private static IMessage CloneMessage(IMessage message) =>
+            (IMessage)typeof(IDeepCloneable<>).MakeGenericType(message.GetType()).GetMethod(nameof(IDeepCloneable<IMessage>.Clone)).Invoke(message, null);
     }
 }

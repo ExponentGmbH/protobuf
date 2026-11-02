@@ -2,6 +2,7 @@
 # Generates C# source files from .proto files.
 # You first need to make sure protoc has been built (see instructions on
 # building protoc in root of this repository)
+# csharp/protos/unittest_immutability.proto is not generated here: its header has the command.
 
 set -e
 

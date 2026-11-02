@@ -49,6 +49,10 @@ namespace Google.Protobuf.Collections
             AddRange(other);
         }
 
+        /// <summary>
+        /// Copies <paramref name="other"/> into a new field. Generated messages use it to serialize
+        /// a repeated field they hold as a read-only list.
+        /// </summary>
         public static RepeatedField<T> From<TCollection>(TCollection other)
             where TCollection : IReadOnlyList<T>
         {
@@ -184,6 +188,10 @@ namespace Google.Protobuf.Collections
             return RepeatedFieldCalculateSize(codec, Count, array);
         }
 
+        /// <summary>
+        /// Wire size of every element of <paramref name="array"/>, for generated messages that
+        /// hold a repeated field as a read-only list rather than a <see cref="RepeatedField{T}"/>.
+        /// </summary>
         public static int RepeatedFieldCalculateSize<TCollection>(
             FieldCodec<T> codec,
             TCollection array
@@ -197,6 +205,10 @@ namespace Google.Protobuf.Collections
             return RepeatedFieldCalculateSize(codec, array.Count(), array);
         }
 
+        /// <summary>
+        /// Wire size of the first <paramref name="count"/> elements of <paramref name="array"/>,
+        /// which may be longer than that when it is a backing array with spare capacity.
+        /// </summary>
         public static int RepeatedFieldCalculateSize<TCollection>(
             FieldCodec<T> codec,
             int count,
@@ -603,6 +615,9 @@ namespace Google.Protobuf.Collections
             return GetRepeatedFieldHashCode(array);
         }
 
+        /// <summary>
+        /// Order-sensitive hash over every element of <paramref name="values"/>, none of which may be null.
+        /// </summary>
         public static int GetRepeatedFieldHashCode<TCollection>(TCollection values)
             where TCollection : IReadOnlyList<T>
         {
@@ -621,9 +636,17 @@ namespace Google.Protobuf.Collections
         /// <returns><c>true</c> if <paramref name="other"/> refers to an equal repeated field; <c>false</c> otherwise.</returns>
         public bool Equals(RepeatedField<T> other)
         {
+            if (other is null)
+            {
+                return false;
+            }
             return RepeatedFieldEquals(this, other);
         }
 
+        /// <summary>
+        /// Order-sensitive comparison using protobuf element equality, for generated messages that
+        /// hold a repeated field as a read-only list. Neither argument may be null.
+        /// </summary>
         public static bool RepeatedFieldEquals<TCollection>(TCollection This, TCollection other)
             where TCollection : IReadOnlyList<T>
         {
@@ -786,7 +809,6 @@ namespace Google.Protobuf.Collections
     /// <summary>
     /// RepeatedFieldDeepCloner
     /// </summary>
-    /// <typeparam name="T"></typeparam>
     public static class RepeatedFieldDeepCloner {
         /// <summary>
         /// Clones struct and value type messages correctly.

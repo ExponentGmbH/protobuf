@@ -31,7 +31,11 @@ namespace Google.Protobuf.Reflection
             DynamicallyAccessedMemberTypes.PublicProperties |
             DynamicallyAccessedMemberTypes.NonPublicProperties |
             // Calling presence methods
-            DynamicallyAccessedMemberTypes.PublicMethods;
+            DynamicallyAccessedMemberTypes.PublicMethods |
+            // Writing the bare public fields of generated structs
+            DynamicallyAccessedMemberTypes.PublicFields |
+            // Clearing the oneofs of generated records, which keep that method private
+            DynamicallyAccessedMemberTypes.NonPublicMethods;
 
         /// <summary>
         /// Irrelevant for file descriptors; the CLR type for the message for message descriptors.

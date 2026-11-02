@@ -290,8 +290,9 @@ namespace Google.Protobuf {
       }
       return descriptor.FieldType switch {
         FieldType.Bool => (bool)value == false,
-        FieldType.Bytes => (ByteString)value == ByteString.Empty,
-        FieldType.String => (string)value == "",
+        // A struct's string and bytes fields are null until assigned.
+        FieldType.Bytes => value == null || (ByteString)value == ByteString.Empty,
+        FieldType.String => value == null || (string)value == "",
         FieldType.Double => (double)value == 0.0,
         FieldType.SInt32 or FieldType.Int32 or FieldType.SFixed32 or FieldType.Enum =>
             (int)value == 0,

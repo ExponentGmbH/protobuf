@@ -33,10 +33,11 @@ namespace Google.Protobuf
 
         // <summary>Deserializes protobuf.</summary>
         /// <param name="data">The data to merge, which must be protobuf-encoded binary data.</param>
+        // Held as IMessage: passing a struct T to these extensions would box a copy each time, and the data would land there.
         public static T Deserialize<T>(byte[] data) where T: IMessage, new() {
-            T value = new T();
-            value.MergeFrom(data);
-            return value;
+            IMessage value = new T();
+            value.MergeFrom(data: data, discardUnknownFields: false, registry: null);
+            return (T) value;
         }
 
         /// <summary>
@@ -55,9 +56,9 @@ namespace Google.Protobuf
         /// <param name="offset">The offset of the slice to merge.</param>
         /// <param name="length">The length of the slice to merge.</param>
         public static T Deserialize<T>(byte[] data, int offset, int length) where T: IMessage, new() {
-            T value = new T();
-            value.MergeFrom(data, offset, length);
-            return value;
+            IMessage value = new T();
+            value.MergeFrom(data: data, offset: offset, length: length, discardUnknownFields: false, registry: null);
+            return (T) value;
         }
 
         /// <summary>
@@ -72,9 +73,9 @@ namespace Google.Protobuf
         // <summary>Deserializes protobuf.</summary>
         /// <param name="data">The data to merge, which must be protobuf-encoded binary data.</param>
         public static T Deserialize<T>(ByteString data) where T: IMessage, new() {
-            T value = new T();
-            value.MergeFrom(data);
-            return value;
+            IMessage value = new T();
+            value.MergeFrom(data: data, discardUnknownFields: false, registry: null);
+            return (T) value;
         }
 
         /// <summary>
@@ -90,9 +91,9 @@ namespace Google.Protobuf
         /// <summary>Deserializes protobuf.</summary>
         /// <param name="data">The data to merge, which must be protobuf-encoded binary data.</param>
         public static T Deserialize<T>(Stream data) where T: IMessage, new() {
-            T value = new T();
-            value.MergeFrom(data);
-            return value;
+            IMessage value = new T();
+            value.MergeFrom(input: data, discardUnknownFields: false, registry: null);
+            return (T) value;
         }
 
         /// <summary>
@@ -108,9 +109,9 @@ namespace Google.Protobuf
         /// <summary>Deserializes protobuf.</summary>
         /// <param name="span">Span containing the data to merge, which must be protobuf-encoded binary data.</param>
         public static T Deserialize<T>(ReadOnlySpan<byte> span) where T: IMessage, new() {
-            T value = new T();
-            value.MergeFrom(span);
-            return value;
+            IMessage value = new T();
+            value.MergeFrom(data: span, discardUnknownFields: false, registry: null);
+            return (T) value;
         }
 
 
@@ -145,9 +146,9 @@ namespace Google.Protobuf
         /// </remarks>
         /// <param name="input">Stream containing the data to merge, which must be protobuf-encoded binary data.</param>
         public static T DeserializeDelimited<T>(Stream input) where T: IMessage, new() {
-            T value = new T();
-            value.MergeDelimitedFrom(input);
-            return value;
+            IMessage value = new T();
+            value.MergeDelimitedFrom(input: input, discardUnknownFields: false, registry: null);
+            return (T) value;
         }
 
         /// <summary>
@@ -324,7 +325,7 @@ namespace Google.Protobuf
                 DiscardUnknownFields = discardUnknownFields,
                 ExtensionRegistry = registry
             };
-            message.MergeFrom(input);
+            input.ReadRawMessage(message: message);
             input.CheckReadEndOfStreamTag();
         }
 
@@ -337,7 +338,7 @@ namespace Google.Protobuf
                 DiscardUnknownFields = discardUnknownFields,
                 ExtensionRegistry = registry
             };
-            message.MergeFrom(input);
+            input.ReadRawMessage(message: message);
             input.CheckReadEndOfStreamTag();
         }
 
@@ -348,7 +349,7 @@ namespace Google.Protobuf
             CodedInputStream input = data.CreateCodedInput();
             input.DiscardUnknownFields = discardUnknownFields;
             input.ExtensionRegistry = registry;
-            message.MergeFrom(input);
+            input.ReadRawMessage(message: message);
             input.CheckReadEndOfStreamTag();
         }
 
@@ -361,7 +362,7 @@ namespace Google.Protobuf
                 DiscardUnknownFields = discardUnknownFields,
                 ExtensionRegistry = registry
             };
-            message.MergeFrom(codedInput);
+            codedInput.ReadRawMessage(message: message);
             codedInput.CheckReadEndOfStreamTag();
         }
 

@@ -18,13 +18,23 @@ namespace Google.Protobuf.Reflection
     /// </summary>
     internal sealed class RepeatedFieldAccessor : FieldAccessorBase
     {
+        // Only generated records have a setter: stock generated code exposes a mutable collection without one.
+        private readonly Action<IMessage, object> maybeSetter;
+
         internal RepeatedFieldAccessor(PropertyInfo property, FieldDescriptor descriptor) : base(property, descriptor)
         {
+            MethodInfo maybeSetMethod = property.GetSetMethod();
+            maybeSetter = maybeSetMethod != null ? ReflectionUtil.CreateActionIMessageObject(maybeSetMethod) : null;
         }
 
         public override void Clear(IMessage message)
         {
             IList list = (IList) GetValue(message);
+            if (list.IsReadOnly)
+            {
+                SetValue(message, ImmutableFieldCollections.EmptyLike(current: list));
+                return;
+            }
             list.Clear();
         }
 
@@ -35,7 +45,11 @@ namespace Google.Protobuf.Reflection
 
         public override void SetValue(IMessage message, object value)
         {
-            throw new InvalidOperationException("SetValue is not implemented for repeated fields");
+            if (maybeSetter == null)
+            {
+                throw new InvalidOperationException("SetValue is not implemented for repeated fields");
+            }
+            maybeSetter(message, value);
         }
     }
 }

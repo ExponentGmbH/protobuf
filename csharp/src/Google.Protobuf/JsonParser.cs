@@ -234,12 +234,18 @@ namespace Google.Protobuf
                 throw new InvalidProtocolBufferException("Repeated field value was not an array. Token type: " + token.Type);
             }
 
-            IList list = (IList) field.Accessor.GetValue(message);
+            // The list of a generated record or struct is immutable: it collects the values and writes the result back.
+            IList current = (IList) field.Accessor.GetValue(message);
+            IList list = current.IsReadOnly ? ImmutableFieldCollections.NewRepeatedFieldLike(current: current) : current;
             while (true)
             {
                 token = tokenizer.Next();
                 if (token.Type == JsonToken.TokenType.EndArray)
                 {
+                    if (current.IsReadOnly)
+                    {
+                        field.Accessor.SetValue(message, ImmutableFieldCollections.Append(current: current, items: list));
+                    }
                     return;
                 }
                 tokenizer.PushBack(token);
@@ -270,13 +276,19 @@ namespace Google.Protobuf
             {
                 throw new InvalidProtocolBufferException("Invalid map field: " + field.FullName);
             }
-            IDictionary dictionary = (IDictionary) field.Accessor.GetValue(message);
+            // The map of a generated record or struct is immutable: it fills a copy and writes that back.
+            IDictionary current = (IDictionary) field.Accessor.GetValue(message);
+            IDictionary dictionary = current.IsReadOnly ? ImmutableFieldCollections.CopyMap(current: current) : current;
 
             while (true)
             {
                 token = tokenizer.Next();
                 if (token.Type == JsonToken.TokenType.EndObject)
                 {
+                    if (current.IsReadOnly)
+                    {
+                        field.Accessor.SetValue(message, dictionary);
+                    }
                     return;
                 }
                 object key = ParseMapKey(keyField, token.StringValue);
@@ -404,9 +416,10 @@ namespace Google.Protobuf
         public T Parse<T>(TextReader jsonReader) where T : IMessage, new()
         {
             ProtoPreconditions.CheckNotNull(jsonReader, nameof(jsonReader));
-            T message = new T();
+            // Held as IMessage so that a struct is merged into this one box and not into a copy made for the call.
+            IMessage message = new T();
             Merge(message, jsonReader);
-            return message;
+            return (T) message;
         }
 
         /// <summary>

@@ -172,7 +172,7 @@ namespace Google.Protobuf
             {
                 codedInput.DiscardUnknownFields = DiscardUnknownFields;
                 codedInput.ExtensionRegistry = Extensions;
-                message.MergeFrom(codedInput);
+                codedInput.ReadRawMessage(message: message);
             }
             finally
             {
@@ -223,6 +223,8 @@ namespace Google.Protobuf
         // The current implementation avoids a virtual method call and a cast, which *may* be significant in some cases.
         // Benchmarking work is required to measure the significance - but it's only a few lines of code in any case.
         // The API wouldn't change anyway - just the implementation - so this work can be deferred.
+        // Every parse below holds the message as IMessage. Each call taking an IMessage would otherwise box its own copy
+        // of a struct T, so the data would land in that copy and an empty T would be returned.
         private readonly Func<T> factory;
 
         /// <summary>
@@ -258,9 +260,9 @@ namespace Google.Protobuf
         /// <returns>The newly parsed message.</returns>
         public new T ParseFrom(byte[] data)
         {
-            T message = factory();
+            IMessage message = factory();
             message.MergeFrom(data, DiscardUnknownFields, Extensions);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -272,9 +274,9 @@ namespace Google.Protobuf
         /// <returns>The newly parsed message.</returns>
         public new T ParseFrom(byte[] data, int offset, int length)
         {
-            T message = factory();
+            IMessage message = factory();
             message.MergeFrom(data, offset, length, DiscardUnknownFields, Extensions);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -284,9 +286,9 @@ namespace Google.Protobuf
         /// <returns>The parsed message.</returns>
         public new T ParseFrom(ByteString data)
         {
-            T message = factory();
+            IMessage message = factory();
             message.MergeFrom(data, DiscardUnknownFields, Extensions);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -296,9 +298,9 @@ namespace Google.Protobuf
         /// <returns>The parsed message.</returns>
         public new T ParseFrom(Stream input)
         {
-            T message = factory();
+            IMessage message = factory();
             message.MergeFrom(input, DiscardUnknownFields, Extensions);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -309,9 +311,9 @@ namespace Google.Protobuf
         [SecuritySafeCritical]
         public new T ParseFrom(ReadOnlySequence<byte> data)
         {
-            T message = factory();
+            IMessage message = factory();
             message.MergeFrom(data, DiscardUnknownFields, Extensions);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -322,9 +324,9 @@ namespace Google.Protobuf
         [SecuritySafeCritical]
         public new T ParseFrom(ReadOnlySpan<byte> data)
         {
-            T message = factory();
+            IMessage message = factory();
             message.MergeFrom(data, DiscardUnknownFields, Extensions);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -338,9 +340,9 @@ namespace Google.Protobuf
         /// <returns>The parsed message.</returns>
         public new T ParseDelimitedFrom(Stream input)
         {
-            T message = factory();
+            IMessage message = factory();
             message.MergeDelimitedFrom(input, DiscardUnknownFields, Extensions);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -350,9 +352,9 @@ namespace Google.Protobuf
         /// <returns>The parsed message.</returns>
         public new T ParseFrom(CodedInputStream input)
         {
-            T message = factory();
+            IMessage message = factory();
             MergeFrom(message, input);
-            return message;
+            return (T) message;
         }
 
         /// <summary>
@@ -364,9 +366,9 @@ namespace Google.Protobuf
         /// <exception cref="InvalidProtocolBufferException">The JSON does not represent a Protocol Buffers message correctly</exception>
         public new T ParseJson(string json)
         {
-            T message = factory();
+            IMessage message = factory();
             JsonParser.Default.Merge(message, json);
-            return message;
+            return (T) message;
         }
 
         /// <summary>

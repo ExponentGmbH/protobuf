@@ -6,6 +6,8 @@
     <SignAssembly>true</SignAssembly>
     <IsPackable>False</IsPackable>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <!-- ImmutabilityTest.cs uses `with` and init-only properties, also on net462 whose default language is C# 7.3. -->
+    <LangVersion>10.0</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,5 +29,14 @@
   <ItemGroup>
     <EmbeddedResource Include="testprotos.pb" />
   </ItemGroup>
+
+  <!-- RefStructCompatibilityTest compiles the TestProtos sources against the net462 output of
+       TestProtos, which a net6.0-only build does not otherwise produce. -->
+  <Target Name="BuildTestProtosNet462" BeforeTargets="Build"
+          Condition="'$(TargetFramework)' == 'net6.0' And '$(OS)' == 'Windows_NT'">
+    <MSBuild Projects="..\Google.Protobuf.Test.TestProtos\Google.Protobuf.Test.TestProtos.csproj"
+             Targets="Build"
+             Properties="TargetFramework=net462;Configuration=$(Configuration)" />
+  </Target>
 
 </Project>

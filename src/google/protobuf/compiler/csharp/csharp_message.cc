@@ -233,9 +233,11 @@ void MessageGenerator::Generate(io::Printer* printer) {
     vars["name"] = UnderscoresToCamelCase(oneof->name(), false);
     vars["property_name"] = UnderscoresToCamelCase(oneof->name(), true);
     vars["original_name"] = oneof->name();
+    if (MessageIsReference(*descriptor_)) {
+      printer->Print(vars, "private object? $name$_;\n");
+    }
     printer->Print(
       vars,
-      "private object? $name$_;\n"
       "/// <summary>Enum of possible cases for the \"$original_name$\" oneof.</summary>\n"
       "public enum $property_name$OneofCase {\n");
     printer->Indent();
@@ -250,20 +252,40 @@ void MessageGenerator::Generate(io::Printer* printer) {
     printer->Print("}\n");
     // TODO: Should we put the oneof .proto comments here?
     // It's unclear exactly where they should go.
-    printer->Print(vars,
-                   "private $property_name$OneofCase $name$Case_ = "
-                   "$property_name$OneofCase.None;\n");
+    if (MessageIsReference(*descriptor_)) {
+      printer->Print(vars,
+                     "private $property_name$OneofCase $name$Case_ = "
+                     "$property_name$OneofCase.None;\n");
+    } else {
+      // No initializer: struct field initializers need C# 10 and None is the zero value anyway.
+      printer->Print(vars, "private $property_name$OneofCase $name$Case_;\n");
+    }
     WriteGeneratedCodeAttributes(printer);
     printer->Print(vars,
                    "public $property_name$OneofCase $property_name$Case {\n"
                    "  get { return $name$Case_; }\n"
                    "}\n\n");
     WriteGeneratedCodeAttributes(printer);
-    printer->Print(vars,
-                   "public void Clear$property_name$() {\n"
-                   "  $name$Case_ = $property_name$OneofCase.None;\n"
-                   "  $name$_ = null;\n"
-                   "}\n\n");
+    if (MessageIsReference(*descriptor_)) {
+      // Private because clearing mutates an immutable record. OneofDescriptor finds it through reflection.
+      printer->Print(vars,
+                     "private void Clear$property_name$() {\n"
+                     "  $name$Case_ = $property_name$OneofCase.None;\n"
+                     "  $name$_ = null;\n"
+                     "}\n\n");
+    } else {
+      printer->Print(vars,
+                     "public void Clear$property_name$() {\n"
+                     "  $name$Case_ = $property_name$OneofCase.None;\n");
+      printer->Indent();
+      for (int j = 0; j < oneof->field_count(); j++) {
+        std::unique_ptr<FieldGeneratorBase> generator(
+            CreateFieldGeneratorInternal(oneof->field(j)));
+        generator->GenerateStructConstructorCode(printer);
+      }
+      printer->Outdent();
+      printer->Print("}\n\n");
+    }
   }
 
   // Standard methods
@@ -389,6 +411,12 @@ void MessageGenerator::GenerateCloningCode(io::Printer* printer) {
         // use ints instead of bytes since bytes lack bitwise operators, saving casts
         printer->Print("_hasBits$i$ = default;\n", "i", absl::StrCat(i));
       }
+      if (MessageIncludesUndefinedFields(*descriptor_)) {
+        printer->Print("_unknownFields = default;\n");
+      }
+      if (has_extension_ranges_) {
+        printer->Print("_extensions = default;\n");
+      }
       // For structs all fields need to be assigned before other code from constructor is called.
       for (int i = 0; i < descriptor_->field_count(); i++) {
         const FieldDescriptor* field = descriptor_->field(i);
@@ -403,10 +431,12 @@ void MessageGenerator::GenerateCloningCode(io::Printer* printer) {
         vars["name"] = UnderscoresToCamelCase(oneof->name(), false);
         vars["property_name"] = UnderscoresToCamelCase(oneof->name(), true);
         vars["original_name"] = oneof->name();
-        printer->Print(
-          vars,
-          "$name$_ = default;\n"
-          "$name$Case_ = default;\n");
+        printer->Print(vars, "$name$Case_ = default;\n");
+        for (int j = 0; j < oneof->field_count(); j++) {
+          std::unique_ptr<FieldGeneratorBase> generator(
+              CreateFieldGeneratorInternal(oneof->field(j)));
+          generator->GenerateStructConstructorCode(printer);
+        }
       }
       printer->Outdent();
     }
@@ -779,10 +809,22 @@ void MessageGenerator::GenerateMergingMethods(io::Printer* printer) {
   printer->Print("}\n\n");
 
   WriteGeneratedCodeAttributes(printer);
+  if (MessageIsReference(*descriptor_)) {
+    printer->Print(
+      "[System.Obsolete(\"Please find some other way because this violates immutability.\")]\n");
+  }
   printer->Print("public void MergeFrom(pb::CodedInputStream input) {\n");
   printer->Print("#if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE\n");
   printer->Indent();
-  printer->Print("input.ReadRawMessage(this);\n");
+  if (MessageIsReference(*descriptor_)) {
+    printer->Print("input.ReadRawMessage(this);\n");
+  } else {
+    // Passing `this` would box a copy of the struct, and what was read would stay in that copy.
+    printer->Print(vars,
+                   "pb::IMessage boxed = this;\n"
+                   "input.ReadRawMessage(boxed);\n"
+                   "this = ($class_name$) boxed;\n");
+  }
   printer->Outdent();
   printer->Print("#else\n");
   printer->Indent();
@@ -808,12 +850,17 @@ void MessageGenerator::GenerateMainParseLoop(io::Printer* printer,
   absl::flat_hash_map<absl::string_view, std::string> vars;
   vars["maybe_ref_input"] = use_parse_context ? "ref input" : "input";
 
+  for (int i = 0; i < fields_by_number().size(); i++) {
+    std::unique_ptr<FieldGeneratorBase> generator(
+        CreateFieldGeneratorInternal(fields_by_number()[i]));
+    generator->GenerateParseLoopPrologue(printer);
+  }
   printer->Emit(R"csharp(
     uint tag;
     while ((tag = input.ReadTag()) != 0) {
     if ((tag & 7) == 4) {
       // Abort on any end group tag.
-      return;
+      break;
     }
     switch(tag) {
   )csharp");
@@ -834,8 +881,11 @@ void MessageGenerator::GenerateMainParseLoop(io::Printer* printer,
         "  break;\n");
     }
   } else {
-      printer->Print(vars,
+      // The value is still on the wire: left there, its bytes would be read as the next tag. An end-group tag never
+      // reaches this arm, the loop above leaves on it, and SkipLastField consumes an unknown group through its end.
+      printer->Print(
         "default:\n"
+        "  input.SkipLastField();\n"
         "  break;\n");
   }
   for (int i = 0; i < fields_by_number().size(); i++) {
@@ -868,6 +918,11 @@ void MessageGenerator::GenerateMainParseLoop(io::Printer* printer,
   printer->Print("}\n");  // switch
   printer->Outdent();
   printer->Print("}\n");  // while
+  for (int i = 0; i < fields_by_number().size(); i++) {
+    std::unique_ptr<FieldGeneratorBase> generator(
+        CreateFieldGeneratorInternal(fields_by_number()[i]));
+    generator->GenerateParseLoopEpilogue(printer);
+  }
 }
 
 // it's a waste of space to track presence for all values, so we only track them

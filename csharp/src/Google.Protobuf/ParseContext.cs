@@ -254,6 +254,13 @@ namespace Google.Protobuf
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadLength() => (int)ParsingPrimitives.ParseRawVarint32(ref buffer, ref state);
 
+        /// <summary>
+        /// Skips the data for the field with the tag that has just been read, as <see cref="CodedInputStream.SkipLastField"/> does.
+        /// </summary>
+        /// <exception cref="InvalidProtocolBufferException">The last tag was an end-group tag</exception>
+        /// <exception cref="InvalidOperationException">The last read operation read to the end of the logical stream</exception>
+        public void SkipLastField() => ParsingPrimitivesMessages.SkipLastField(ref buffer, ref state);
+
         internal void CopyStateTo(CodedInputStream input)
         {
             input.InternalState = state;

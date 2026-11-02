@@ -444,11 +444,8 @@ namespace Google.Protobuf
                 (ref WriteContext output, T value) => output.WriteMessage(value),
                 (ref ParseContext ctx, ref T v) =>
                 {
-                    if (v == null)
-                    {
-                        v = parser.CreateTemplate();
-                    }
-
+                    // v is an object SetExtension's caller may hold; see MergeExtensionValue.
+                    v = v == null ? parser.CreateTemplate() : v.Clone();
                     ctx.ReadMessage(v);
                 },
                 (ref T v, T v2) =>
@@ -463,7 +460,7 @@ namespace Google.Protobuf
                     }
                     else
                     {
-                        v.MergeFrom(v2);
+                        MergeExtensionValue(target: ref v, source: v2);
                     }
                     return true;
                 },
@@ -498,7 +495,7 @@ namespace Google.Protobuf
                 },
                 (ref T v, T v2) =>
                 {
-                    v.MergeFrom(v2);
+                    MergeExtensionValue(target: ref v, source: v2);
                     return true;
                 },
                 message => CodedOutputStream.ComputeMessageSize(message),
@@ -526,11 +523,8 @@ namespace Google.Protobuf
                 (ref WriteContext output, T value) => output.WriteGroup(value),
                 (ref ParseContext ctx, ref T v) =>
                 {
-                    if (v == null)
-                    {
-                        v = parser.CreateTemplate();
-                    }
-
+                    // v is an object SetExtension's caller may hold; see MergeExtensionValue.
+                    v = v == null ? parser.CreateTemplate() : v.Clone();
                     ctx.ReadGroup(v);
                 },
                 (ref T v, T v2) =>
@@ -545,7 +539,7 @@ namespace Google.Protobuf
                     }
                     else
                     {
-                        v.MergeFrom(v2);
+                        MergeExtensionValue(target: ref v, source: v2);
                     }
                     return true;
                 },
@@ -606,6 +600,23 @@ namespace Google.Protobuf
                 0,
                 null
             ); // Default value for the wrapper
+        }
+
+        /// <summary>
+        /// Merges one message's extension value into another's. SetExtension stores the object it is given and
+        /// GetExtension returns the stored one, so merging into target would change a record its holder relies on
+        /// being immutable. The merge therefore writes to a copy, which replaces target. IMessage.MergeFrom is obsolete
+        /// because it writes into its receiver; here the receiver is that private copy, and generated messages expose
+        /// no other merge of two messages.
+        /// </summary>
+        private static void MergeExtensionValue<T>(ref T target, T source)
+            where T : IMessage<T>
+        {
+            T merged = target.Clone();
+#pragma warning disable CS0618
+            merged.MergeFrom(source);
+#pragma warning restore CS0618
+            target = merged;
         }
 
         /// <summary>
@@ -833,9 +844,11 @@ namespace Google.Protobuf
             ProtobufEqualityComparers.GetEqualityComparer<T>();
         private static readonly T DefaultDefault;
 
-        // Only non-nullable value types support packing, but not struct messages.
-        // For value types, default(T) != null, but IMessage structs must not use packed encoding
-        // since WriteMessage already writes a length prefix per element.
+        /// <summary>
+        /// Whether repeated values of <typeparamref name="T"/> may use packed encoding: non-nullable
+        /// value types only. For value types, default(T) != null, but IMessage structs must not use
+        /// packed encoding since WriteMessage already writes a length prefix per element.
+        /// </summary>
         public static readonly bool TypeSupportsPacking =
             default(T) != null && !typeof(IMessage).IsAssignableFrom(typeof(T));
 

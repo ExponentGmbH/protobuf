@@ -1,0 +1,122 @@
+// Inputs of csharp/src/Google.Protobuf.Test/ImmutabilityTest.cs: one record and one struct with every field kind.
+//
+// csharp/generate_protos.sh does not generate this file, because the protos it covers are compared with stock protoc
+// output. Regenerate it with a protoc built from this fork, from the repository root:
+//
+//   protoc -Isrc -Icsharp/protos \
+//     --csharp_out=csharp/src/Google.Protobuf.Test.TestProtos/Immutability \
+//     unittest_immutability.proto
+syntax = "proto3";
+
+package protobuf_unittest_immutability;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/wrappers.proto";
+
+option csharp_namespace = "Google.Protobuf.TestProtos.Immutability";
+
+// The generator reads these by number (src/google/protobuf/descriptor_utils.cc), whatever file declares them.
+extend google.protobuf.MessageOptions {
+  bool use_struct = 50001;
+  bool ignore_undefined_fields = 50002;
+}
+
+extend google.protobuf.FieldOptions {
+  bool use_ref = 50003;
+  string type = 50004;
+}
+
+enum Shade {
+  SHADE_UNSPECIFIED = 0;
+  SHADE_DARK = 1;
+  SHADE_LIGHT = 2;
+}
+
+message RecordLeaf {
+  int32 number = 1;
+  map<string, int32> entries = 2;
+  repeated int32 items = 3;
+}
+
+message StructLeaf {
+  option (use_struct) = true;
+  option (ignore_undefined_fields) = true;
+
+  int32 number = 1;
+}
+
+message RecordOwner {
+  int32 primitive_field = 1;
+  string string_field = 2;
+  bytes bytes_field = 3;
+  Shade enum_field = 4;
+  RecordLeaf message_field = 5;
+  StructLeaf struct_field = 6;
+  StructLeaf ref_field = 7 [(use_ref) = true];
+  optional int32 optional_primitive_field = 8;
+  optional string optional_string_field = 9;
+  optional bytes optional_bytes_field = 10;
+  optional Shade optional_enum_field = 11;
+  optional RecordLeaf optional_message_field = 12;
+  google.protobuf.Int32Value int_wrapper_field = 13;
+  google.protobuf.StringValue string_wrapper_field = 14;
+  google.protobuf.BytesValue bytes_wrapper_field = 15;
+  repeated int32 repeated_primitive_field = 16;
+  repeated string repeated_string_field = 17;
+  repeated Shade repeated_enum_field = 18;
+  repeated RecordLeaf repeated_message_field = 19;
+  map<string, int32> map_field = 20;
+  map<string, RecordLeaf> map_message_field = 21;
+
+  oneof choice {
+    int32 primitive_case = 30;
+    string string_case = 31;
+    bytes bytes_case = 32;
+    Shade enum_case = 33;
+    RecordLeaf message_case = 34;
+    StructLeaf struct_case = 35;
+    google.protobuf.Int32Value int_wrapper_case = 36;
+    google.protobuf.StringValue string_wrapper_case = 37;
+  }
+}
+
+message StructOwner {
+  option (use_struct) = true;
+  option (ignore_undefined_fields) = true;
+
+  int32 primitive_field = 1;
+  string string_field = 2;
+  bytes bytes_field = 3;
+  Shade enum_field = 4;
+  RecordLeaf message_field = 5;
+  StructLeaf struct_field = 6;
+  optional int32 optional_primitive_field = 8;
+  optional string optional_string_field = 9;
+  optional bytes optional_bytes_field = 10;
+  optional Shade optional_enum_field = 11;
+  optional RecordLeaf optional_message_field = 12;
+  google.protobuf.Int32Value int_wrapper_field = 13;
+  google.protobuf.StringValue string_wrapper_field = 14;
+  google.protobuf.BytesValue bytes_wrapper_field = 15;
+  repeated int32 repeated_primitive_field = 16;
+  repeated string repeated_string_field = 17;
+  repeated Shade repeated_enum_field = 18;
+  repeated RecordLeaf repeated_message_field = 19;
+  map<string, int32> map_field = 20;
+  map<string, RecordLeaf> map_message_field = 21;
+
+  oneof choice {
+    int32 primitive_case = 30;
+    string string_case = 31;
+    bytes bytes_case = 32;
+    Shade enum_case = 33;
+    RecordLeaf message_case = 34;
+    StructLeaf struct_case = 35;
+    google.protobuf.Int32Value int_wrapper_case = 36;
+    google.protobuf.StringValue string_wrapper_case = 37;
+  }
+}
+
+message StructOwnerHolder {
+  StructOwner owner = 1;
+}

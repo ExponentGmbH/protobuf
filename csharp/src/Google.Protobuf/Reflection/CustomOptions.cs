@@ -216,7 +216,7 @@ namespace Google.Protobuf.Reflection
                 {
                     ByteString bytes = single.GetValue().ToByteString();
                     value = new T();
-                    value.MergeFrom(bytes);
+                    value.MergeFrom(data: bytes, discardUnknownFields: false, registry: null);
                     return true;
                 }
                 else if (extensionValue is RepeatedExtensionValue<T> repeated)
@@ -225,7 +225,7 @@ namespace Google.Protobuf.Reflection
                         .Select(v => v.ToByteString())
                         .Aggregate(new T(), (t, b) =>
                         {
-                            t.MergeFrom(b);
+                            t.MergeFrom(data: b, discardUnknownFields: false, registry: null);
                             return t;
                         });
                     return true;

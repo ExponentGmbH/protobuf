@@ -22,9 +22,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <!-- Include PDB in the built .nupkg -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-    <IsTrimmable>true</IsTrimmable>
-    <!-- Disable warnings about AOT and trimming features on older targets, e.g. netstandard2.0.
-         For now, continue to apply these features to these targets because some packages don't have a target that supports them -->
+    <!-- Disable warnings about AOT and trimming features on older targets, e.g. netstandard2.0. -->
     <NoWarn>$(NoWarn);NETSDK1195;NETSDK1210</NoWarn>	  
   </PropertyGroup>
 
